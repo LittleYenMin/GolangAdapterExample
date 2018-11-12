@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"reflect"
 )
 
 type Message interface {
@@ -19,81 +20,59 @@ type TestMessage struct {
 
 func (t TestMessage) message() {}
 
-type MessageHandler struct {
-	name    string
-	handler Handler
-}
-
-type Handler interface {
-	handle(t Message)
-}
-
-type HandlerAdapt func(t Message)
-
-func (h HandlerAdapt) handle(t Message) {
-	h(t)
-}
-
-type Mux struct {
-	m map[string]MessageHandler
-}
-
-func (mu *Mux) setListener(msg Message, callback Handler) {
-	name := fmt.Sprintf("%T", msg)
-	fmt.Println("ListenerName is", name)
-	mu.m[name] = MessageHandler{
-		name,
-		callback,
+type (
+	MessageHandler func(t Message)
+	Mux            struct {
+		handlerMap map[reflect.Type]MessageHandler
 	}
+)
+
+func (mu *Mux) setListener(msg Message, callback MessageHandler) {
+	msgT := reflect.TypeOf(msg)
+	mu.handlerMap[msgT] = callback
 }
 
 func (mu *Mux) do(event Message) {
-	name := fmt.Sprintf("%T", event)
-	fmt.Println("doName is", name)
-	handler, ok := mu.m[name]
+	msgT := reflect.TypeOf(event)
+	handler, ok := mu.handlerMap[msgT]
 	if ok {
-		handler.handler.handle(event)
+		handler(event)
 	}
 }
 
-func someMessageHandle(t Message) {
-	fmt.Println(t.(TestMessage).Name, "is under control now!")
-}
-
-func test(w http.ResponseWriter, r *http.Request) {
-
-	bytes, err := ioutil.ReadAll(r.Body)
+func (mu *Mux) test(w http.ResponseWriter, r *http.Request) {
+	input, err := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
-
 	if err != nil {
 		log.Fatalln(err)
 	}
 
 	var msg TestMessage
-	error := json.Unmarshal(bytes, &msg)
-	if error != nil {
-		log.Fatalln("JSON PARSE ERROR")
+	if err := json.Unmarshal(input, &msg); err != nil {
+		log.Printf("[JSON] %s\n", err)
 	}
 	fmt.Println(msg)
-	mux.do(msg)
-	outputBytes, err := json.Marshal(msg)
+	mu.do(msg)
+	response, err := json.Marshal(msg)
 	if err != nil {
-		log.Fatalln("CONVERT JSON ERROR")
+		log.Printf("[JSON] %s\n", err)
 	}
-	w.Header().Set("content-type", "application/json")
-	w.Write(outputBytes)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(response)
 }
 
-var mux Mux
+func someMessageHandle(t Message) {
+	fmt.Printf("%s is under control now!\n", t.(TestMessage).Name)
+}
 
 func main() {
-	mux = Mux{
-		make(map[string]MessageHandler),
+	mux := &Mux{
+		make(map[reflect.Type]MessageHandler),
 	}
-	mux.setListener(TestMessage{}, HandlerAdapt(someMessageHandle))
-	http.HandleFunc("/test", test)
+	mux.setListener(TestMessage{}, someMessageHandle)
+	http.HandleFunc("/test", mux.test)
 	port := 8080
-	fmt.Println("Server running on port", port)
+	fmt.Printf("Server running on port %d\n", port)
 	listenPort := fmt.Sprintf(":%d", port)
 	log.Fatal(http.ListenAndServe(listenPort, nil))
 }

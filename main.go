@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"reflect"
 
 	"github.com/line/line-bot-sdk-go/linebot"
@@ -38,7 +39,7 @@ func main() {
 	}
 	mux.setListener(&linebot.TextMessage{}, txetMessageHandler)
 	var err error
-	bot, err = linebot.New("004a55e347fd117cd562e75ff78e0721", "oOrido9o+9oKAlmWV7OzDglYNIxwe+mOBjU2N+9aORiVRteq1qBx4jCMR5LZkEf/19ojH0KbwMrjLnKu8tWrvP2Ke27ul0AX+Tr7LHWYDrx8wN7sq5saY0Rod3EpCe17A7ZmO8LCGa5CB/TsIIM5KgdB04t89/1O/w1cDnyilFU=")
+	bot, err = linebot.New(os.Getenv("secret"), os.Getenv("token"))
 	log.Println("Bot: ", bot, "Err: ", err)
 	http.HandleFunc("/callback", mux.lineBotCallbackHandler)
 	port := 8080

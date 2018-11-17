@@ -1,32 +1,25 @@
 package main
 
-import "reflect"
+import (
+	"reflect"
 
-type Message interface {
-	message()
-}
-
-type TestMessage struct {
-	Name string `json:"name"`
-	Age  *int64 `json:"age"`
-}
-
-func (t TestMessage) message() {}
+	"github.com/line/line-bot-sdk-go/linebot"
+)
 
 type (
-	MessageHandler func(t Message)
+	MessageHandler func(t linebot.Event)
 	Mux            struct {
 		handlerMap map[reflect.Type]MessageHandler
 	}
 )
 
-func (mu *Mux) setListener(msg Message, callback MessageHandler) {
+func (mu *Mux) setListener(msg linebot.Message, callback MessageHandler) {
 	msgT := reflect.TypeOf(msg)
 	mu.handlerMap[msgT] = callback
 }
 
-func (mu *Mux) do(event Message) {
-	msgT := reflect.TypeOf(event)
+func (mu *Mux) do(event linebot.Event) {
+	msgT := reflect.TypeOf(event.Message)
 	handler, ok := mu.handlerMap[msgT]
 	if ok {
 		handler(event)

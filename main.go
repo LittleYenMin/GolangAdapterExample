@@ -1,46 +1,46 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"reflect"
+
+	"github.com/line/line-bot-sdk-go/linebot"
 )
 
-func (mu *Mux) test(w http.ResponseWriter, r *http.Request) {
-	input, err := ioutil.ReadAll(r.Body)
-	defer r.Body.Close()
-	if err != nil {
-		log.Fatalln(err)
-	}
+var bot *linebot.Client
 
-	var msg TestMessage
-	if err := json.Unmarshal(input, &msg); err != nil {
-		log.Printf("[JSON] %s\n", err)
-	}
-	fmt.Println(msg)
-	mu.do(msg)
-	response, err := json.Marshal(msg)
+func (mu *Mux) lineBotCallbackHandler(w http.ResponseWriter, r *http.Request) {
+	events, err := bot.ParseRequest(r)
+	log.Println("Events: ", events, "Error: ", err)
 	if err != nil {
-		log.Printf("[JSON] %s\n", err)
+		w.WriteHeader(400)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(response)
+	for _, event := range events {
+		if event.Type == linebot.EventTypeMessage {
+			mu.do(*event)
+		}
+		log.Println("We Got line Event: ", event)
+	}
 }
-
-func someMessageHandle(t Message) {
-	msg := t.(TestMessage)
-	fmt.Printf("%s is under control now!\n", msg.Name)
+func txetMessageHandler(t linebot.Event) {
+	message := t.Message.(*linebot.TextMessage)
+	_, err := bot.ReplyMessage(t.ReplyToken, linebot.NewTextMessage(message.Text)).Do()
+	if err != nil {
+		log.Println("Reply Error: ", err)
+	}
 }
 
 func main() {
 	mux := &Mux{
 		make(map[reflect.Type]MessageHandler),
 	}
-	mux.setListener(TestMessage{}, someMessageHandle)
-	http.HandleFunc("/test", mux.test)
+	mux.setListener(&linebot.TextMessage{}, txetMessageHandler)
+	var err error
+	bot, err = linebot.New("004a55e347fd117cd562e75ff78e0721", "oOrido9o+9oKAlmWV7OzDglYNIxwe+mOBjU2N+9aORiVRteq1qBx4jCMR5LZkEf/19ojH0KbwMrjLnKu8tWrvP2Ke27ul0AX+Tr7LHWYDrx8wN7sq5saY0Rod3EpCe17A7ZmO8LCGa5CB/TsIIM5KgdB04t89/1O/w1cDnyilFU=")
+	log.Println("Bot: ", bot, "Err: ", err)
+	http.HandleFunc("/callback", mux.lineBotCallbackHandler)
 	port := 8080
 	fmt.Printf("Server running on port %d\n", port)
 	listenPort := fmt.Sprintf(":%d", port)
